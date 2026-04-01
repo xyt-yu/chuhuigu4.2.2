@@ -1,26 +1,38 @@
+import pandas as pd
 import json
 
+from sentence_transformers import SentenceTransformer
+
+# Initialize the Sentence Transformer model
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
 class DataLoader:
-    def __init__(self, file_path):
-        self.file_path = file_path
+    def __init__(self, data_frame):
+        self.data_frame = data_frame
 
-    def load_data(self):
-        with open(self.file_path, 'r') as file:
-            data = json.load(file)
-            return data
+    def filter_data(self, salary=None, location=None, keywords=None):
+        filtered_data = self.data_frame
+        
+        if salary:
+            filtered_data = filtered_data[filtered_data['salary'] >= salary]
+        
+        if location:
+            filtered_data = filtered_data[filtered_data['location'] == location]
+        
+        if keywords:
+            filtered_data = filtered_data[filtered_data['keywords'].apply(lambda x: any(k in x for k in keywords))]
+        
+        return filtered_data
 
-    def filter_data(self, data, filter_condition):
-        return [job for job in data if filter_condition(job)]
+    def vectorize_data(self, text_column):
+        return model.encode(text_column.tolist(), convert_to_tensor=True)
 
-    def vectorize_data(self, filtered_data):
-        # Placeholder for vectorization logic
-        vectorized_data = []
-        for job in filtered_data:
-            # Apply your vectorization algorithm here
-            vectorized_data.append(job)  # Just a placeholder
-        return vectorized_data
+    def export_to_json(self, filepath):
+        self.data_frame.to_json(filepath, orient='records', lines=True)
 
-    def load_filtered_vectorized_data(self, filter_condition):
-        raw_data = self.load_data()
-        filtered_data = self.filter_data(raw_data, filter_condition)
-        return self.vectorize_data(filtered_data)
+# Example usage
+# df = pd.read_csv('data.csv')
+# loader = DataLoader(df)
+# filtered = loader.filter_data(salary=50000, location='New York', keywords=['Python', 'Data Science'])
+# vectors = loader.vectorize_data(filtered['job_description'])
+# loader.export_to_json('filtered_data.json')
