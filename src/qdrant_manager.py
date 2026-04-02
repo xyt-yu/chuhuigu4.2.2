@@ -1,44 +1,121 @@
 import logging
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+import json
 
 class QdrantManager:
-    def __init__(self, host: str, port: int)：
+    def __init__(self, host: str = 'localhost', port: int = 6333):
+        """Initialize Qdrant manager."""
         self.client = QdrantClient(host=host, port=port)
+        self.collection_name = "job_knowledge_base"
 
-    def connect(self):
+    def connect(self) -> bool:
+        """Connect to Qdrant server."""
         try:
-            self.client.info()
-            logging.info('Connected to Qdrant server.')
+            self.client.get_collections()
+            logging.info('✓ Connected to Qdrant server.')
+            return True
         except Exception as e:
-            logging.error(f'Connection failed: {e}')
-            raise
+            logging.error(f'✗ Connection failed: {e}')
+            return False
 
-    def create_collection(self, collection_name: str):
-        vector_params = models.VectorParams(size=512, distance=models.Distance.COSINE)
-        self.client.recreate_collection(name=collection_name, vector_params=vector_params)
-        logging.info(f'Collection {collection_name} created.')
+    def create_collection(self, collection_name: str = None, vector_size: int = 384) -> bool:
+        """Create a new collection."""
+        try:
+            if collection_name:
+                self.collection_name = collection_name
+            
+            try:
+                self.client.delete_collection(self.collection_name)
+            except:
+                pass
+            
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+            )
+            logging.info(f'✓ Collection {self.collection_name} created.')
+            return True
+        except Exception as e:
+            logging.error(f'✗ Create collection failed: {e}')
+            return False
 
-    def import_vectorized_data(self, collection_name: str, json_file_path: str):
-        import json
-        with open(json_file_path, 'r') as f:
-            data = json.load(f)
-            points = [models.Point(id=item['id'], vector=item['vector']) for item in data]
-            self.client.upsert(collection_name=collection_name, points=points)
-            logging.info(f'Data imported into collection {collection_name}.')
+    def import_vectorized_data(self, json_file_path: str) -> bool:
+        """Import vectorized data from JSON."""
+        try:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            points = []
+            for item in data:
+                point = PointStruct(
+                    id=int(item['job_id']),
+                    vector=item['vector'],
+                    payload={
+                        'title': item.get('title', ''),
+                        'company': item.get('company', ''),
+                        'location': item.get('location', ''),
+                        'salary': item.get('salary', ''),
+                        'description': item.get('description', '')
+                    }
+                )
+                points.append(point)
+            
+            self.client.upsert(collection_name=self.collection_name, points=points)
+            logging.info(f'✓ Imported {len(points)} records.')
+            return True
+        except Exception as e:
+            logging.error(f'✗ Import failed: {e}')
+            return False
 
-    def search_by_similarity(self, collection_name: str, query_vector: list):
-        results = self.client.search(collection_name=collection_name, query_vector=query_vector)
-        logging.info(f'Search results: {results}')
-        return results
+    def search_by_similarity(self, query_vector, limit: int = 10):
+        """Search for similar jobs."""
+        try:
+            results = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=limit
+            )
+            return results
+        except Exception as e:
+            logging.error(f'✗ Search failed: {e}')
+            return []
 
-    def insert_job_data(self, collection_name: str, job_id: str, vector: list):
-        self.client.upsert(collection_name=collection_name, points=[models.Point(id=job_id, vector=vector)])
-        logging.info(f'Job data for {job_id} inserted.')
+    def insert_job_data(self, job_data: dict, vector: list) -> bool:
+        """Insert job data."""
+        try:
+            point = PointStruct(
+                id=int(job_data.get('job_id', 0)),
+                vector=vector,
+                payload=job_data
+            )
+            self.client.upsert(collection_name=self.collection_name, points=[point])
+            return True
+        except Exception as e:
+            logging.error(f'✗ Insert failed: {e}')
+            return False
 
-    def update_job(self, collection_name: str, job_id: str, update_payload: dict):
-        self.client.upsert(collection_name=collection_name, points=[models.Point(id=job_id, payload=update_payload)])
-        logging.info(f'Job {job_id} updated.')
+    def update_job(self, job_id: int, updated_payload: dict) -> bool:
+        """Update job information."""
+        try:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload=updated_payload,
+                points_selector=[job_id]
+            )
+            return True
+        except Exception as e:
+            logging.error(f'✗ Update failed: {e}')
+            return False
 
-    def delete_job(self, collection_name: str, job_id: str):
-        self.client.delete(collection_name=collection_name, points=[job_id])
-        logging.info(f'Job {job_id} deleted.')
+    def delete_job(self, job_id: int) -> bool:
+        """Delete job."""
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=[job_id]
+            )
+            return True
+        except Exception as e:
+            logging.error(f'✗ Delete failed: {e}')
+            return False
