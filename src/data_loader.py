@@ -1,38 +1,41 @@
-import pandas as pd
 import json
-
 from sentence_transformers import SentenceTransformer
 
-# Initialize the Sentence Transformer model
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
 class DataLoader:
-    def __init__(self, data_frame):
-        self.data_frame = data_frame
+    def __init__(self, json_path):
+        self.json_path = json_path
+        self.data = self.load_data()
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')  # Load a pre-trained SentenceTransformer model
 
-    def filter_data(self, salary=None, location=None, keywords=None):
-        filtered_data = self.data_frame
-        
-        if salary:
-            filtered_data = filtered_data[filtered_data['salary'] >= salary]
-        
+    def load_data(self):
+        with open(self.json_path, 'r') as file:
+            return json.load(file)
+
+    def filter_jobs(self, location=None, min_salary=None, keywords=None):
+        filtered_jobs = self.data
         if location:
-            filtered_data = filtered_data[filtered_data['location'] == location]
-        
+            filtered_jobs = [job for job in filtered_jobs if job.get('location') == location]
+        if min_salary:
+            filtered_jobs = [job for job in filtered_jobs if job.get('salary', 0) >= min_salary]
         if keywords:
-            filtered_data = filtered_data[filtered_data['keywords'].apply(lambda x: any(k in x for k in keywords))]
-        
-        return filtered_data
+            filtered_jobs = [job for job in filtered_jobs if any(keyword.lower() in job.get('description', '').lower() for keyword in keywords)]
+        return filtered_jobs
 
-    def vectorize_data(self, text_column):
-        return model.encode(text_column.tolist(), convert_to_tensor=True)
+    def vectorize_jobs(self, jobs):
+        descriptions = [job['description'] for job in jobs]
+        vectors = self.model.encode(descriptions)
+        return vectors
 
-    def export_to_json(self, filepath):
-        self.data_frame.to_json(filepath, orient='records', lines=True)
+    def export_to_json(self, filtered_jobs, export_path):
+        with open(export_path, 'w') as file:
+            json.dump(filtered_jobs, file, indent=4)
 
-# Example usage
-# df = pd.read_csv('data.csv')
-# loader = DataLoader(df)
-# filtered = loader.filter_data(salary=50000, location='New York', keywords=['Python', 'Data Science'])
-# vectors = loader.vectorize_data(filtered['job_description'])
-# loader.export_to_json('filtered_data.json')
+    def process_pipeline(self, location=None, min_salary=None, keywords=None, export_path='filtered_jobs.json'):
+        filtered_jobs = self.filter_jobs(location, min_salary, keywords)
+        vectors = self.vectorize_jobs(filtered_jobs)
+        self.export_to_json(filtered_jobs, export_path)
+        return filtered_jobs, vectors
+
+# Example usage:
+# loader = DataLoader('path/to/job_data.json')
+# loader.process_pipeline(location='New York', min_salary=100000, keywords=['data scientist'])
