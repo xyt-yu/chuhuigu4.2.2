@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data
+data/vectorized_jobs.json
+data/exported_jobs.json
+
+# Logs
+*.log
+
+# Cache
+.cache/
+*.cache
