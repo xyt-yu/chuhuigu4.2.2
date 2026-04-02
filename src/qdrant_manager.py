@@ -2,7 +2,7 @@ import logging
 from qdrant_client import QdrantClient, models
 
 class QdrantManager:
-    def __init__(self, host: str, port: int)
+    def __init__(self, host: str, port: int)：
         self.client = QdrantClient(host=host, port=port)
 
     def connect(self):
